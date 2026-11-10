@@ -222,20 +222,33 @@ void ApplyDefaultStates(X86Context& ctx) {
     GUEST_CALL(D3D_InitDefaultState, ctx, {});
 #else
     (void)ctx;
-    // Zeroed guest data is not a valid D3D texture address mode. Xbox D3D defaults
-    // AddressU/V/W to WRAP (1); initialize only unset slots so title-written state
-    // remains intact. The renderer mirrors these values because SyncDeferred reads
-    // the guest table before drawing.
+    // This image omits the XDK initializer, so its zeroed texture-stage table lacks
+    // the defaults the guest's state translator expects (notably ColorOp at index
+    // 12). Fill the D3D defaults only in unset slots, preserving title-written state.
     for (uint32_t stage = 0; stage < 4; stage++) {
-        for (uint32_t state : {gpu::kTssAddressU, gpu::kTssAddressV, gpu::kTssAddressW}) {
+        auto set_if_unset = [stage](uint32_t state, uint32_t value) {
             uint32_t p = kTextureState + (stage * kStageStates + state) * 4;
             if (!R32(p)) {
-                W32(p, 1);
-                g_state.tss[stage][state] = 1;
+                W32(p, value);
+                g_state.tss[stage][state] = value;
             }
-        }
+        };
+        set_if_unset(gpu::kTssAddressU, 1);  // WRAP
+        set_if_unset(gpu::kTssAddressV, 1);
+        set_if_unset(gpu::kTssAddressW, 1);
+        set_if_unset(gpu::kTssMagFilter, 1);  // POINT
+        set_if_unset(gpu::kTssMinFilter, 1);
+        set_if_unset(gpu::kTssMaxAnisotropy, 1);
+        set_if_unset(gpu::kTssColorOp, stage == 0 ? 4 : 1);  // MODULATE, then DISABLE
+        set_if_unset(gpu::kTssColorArg1, 2);                 // TEXTURE
+        set_if_unset(gpu::kTssColorArg2, 1);                 // CURRENT
+        set_if_unset(gpu::kTssAlphaOp, stage == 0 ? 2 : 1);  // SELECTARG1, then DISABLE
+        set_if_unset(gpu::kTssAlphaArg1, 2);
+        set_if_unset(gpu::kTssAlphaArg2, 1);
+        set_if_unset(gpu::kTssTexCoordIndex, stage);
+        set_if_unset(gpu::kTssResultArg, 1);  // CURRENT
     }
-    LOG_FIRST(1, "d3d: image has no D3D_InitDefaultState; applied unset texture address defaults");
+    LOG_FIRST(1, "d3d: image has no D3D_InitDefaultState; applied unset texture-stage defaults");
 #endif
 }
 
