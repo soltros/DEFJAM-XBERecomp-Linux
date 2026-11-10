@@ -68,6 +68,22 @@ bool Init() {
         LOGE("memory: could not reserve the 4 GB guest space");
         return false;
     }
+
+    // XDK startup probes NV2A registers before creating the host D3D device.
+    // The rest of the guest range is intentionally PROT_NONE, so leaving these
+    // hardware windows unbacked turns normal MMIO probes into host SIGSEGVs.
+    auto map_device_window = [](uint32_t va, uint32_t size) {
+#ifdef _WIN32
+        return VirtualAlloc(g_base + va, size, MEM_COMMIT, PAGE_READWRITE) == g_base + va;
+#else
+        return mprotect(g_base + va, size, PROT_READ | PROT_WRITE) == 0;
+#endif
+    };
+    if (!map_device_window(kNv2aBase, kNv2aSize) || !map_device_window(kMcpxBase, kMcpxSize) ||
+        !map_device_window(kFlashBase, kFlashSize)) {
+        LOGE("memory: could not map Xbox device apertures");
+        return false;
+    }
     LOGI("memory: guest space at %p", static_cast<void*>(g_base));
     return true;
 }
@@ -109,7 +125,11 @@ void Decommit(uint32_t va, uint32_t size) {
     for (uint64_t p = first; p < end; p += kPage) g_committed[size_t(p >> 12)] = 0;
 }
 
-bool IsCommitted(uint32_t va) { return InPhysical(va) || g_committed[va >> 12] != 0; }
+bool IsCommitted(uint32_t va) {
+    return InPhysical(va) || (va >= kNv2aBase && va < kNv2aBase + kNv2aSize) ||
+           (va >= kMcpxBase && va < kMcpxBase + kMcpxSize) ||
+           (va >= kFlashBase && va < kFlashBase + kFlashSize) || g_committed[va >> 12] != 0;
+}
 
 // first fit allocator over a guest range
 class Ranges {

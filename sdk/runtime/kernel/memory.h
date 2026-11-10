@@ -15,6 +15,12 @@ constexpr uint32_t kSystemBase = 0xB0000000;       // pool, system memory, threa
 constexpr uint32_t kSystemSize = 0x10000000;
 constexpr uint32_t kStackBase = 0xD0000000;
 constexpr uint32_t kStackSize = 0x10000000;
+// Device apertures are part of the Xbox virtual address space. The current
+// host backend emulates their effects where needed; backing them here keeps
+// ordinary guest register reads and writes inside the reserved 4 GB mapping.
+constexpr uint32_t kNv2aBase = 0xFD000000, kNv2aSize = 0x01000000;
+constexpr uint32_t kMcpxBase = 0xFE800000, kMcpxSize = 0x00800000;
+constexpr uint32_t kFlashBase = 0xFF000000, kFlashSize = 0x00100000;
 
 // NT allocation flags
 constexpr uint32_t kMemCommit = 0x1000, kMemReserve = 0x2000, kMemDecommit = 0x4000, kMemRelease = 0x8000,
